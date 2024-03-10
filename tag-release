@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+
+declare tag_version="${1}"
+declare tag_note="${2}"
+
+git_lg() {
+	git log --pretty=format:'%h -%d %s (%cr) <%an>' --abbrev-commit --decorate "${@}"
+} # git_lg()
+
+if [[ ! ${tag_version} =~ ^v[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?$ ]]; then
+	printf "ERROR: tag [%s] doesn't match the regex [%s]\n" "${tag_version}" '^v[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?$'
+	exit 1
+fi
+
+if git tag | grep -E "^${tag_version}$"; then
+	printf "ERROR: tag [%s] already exits\n" "${tag_version}"
+	exit 1
+fi
+
+if [[ -z ${tag_note} ]]; then
+	printf "ERROR: tag note/comment is empty\n"
+	exit 1
+fi
+
+declare tag_message="release: ${tag_version} - ${tag_note}"
+
+declare current_branch
+current_branch="$(git branch --show-current)"
+
+declare current_remote
+current_remote="$(git rev-parse --abbrev-ref --symbolic-full-name "@{u}" | cut -f1 -d'/')"
+
+declare previous_tag
+
+declare -i tag_count
+tag_count="$(git tag --list -n0 | wc -l)"
+
+if [[ ${tag_count} -gt 0 ]]; then
+	previous_tag="$(git tag --list -n0 | tail -n1)"
+
+	declare -i unreleased_commit_count=0
+
+	# Can't reliably use wc because the last log line doesn't end with a new line.
+	# So 0 and 1 commits are indistinguishable from each other.
+	# format: ^6e5f52e - (HEAD -> main) ci(tag-release): abort when no unreleased commits are found (3 minutes ago) <Victor Payno>$
+	unreleased_commit_count="$(git_lg "${previous_tag}".. | grep -c -E '[a-z0-9]+\s+-')"
+
+	if [[ ${unreleased_commit_count} -eq 0 ]]; then
+		printf "\n"
+		printf "ERROR: No unreleased commits found since the last tag, %s\n" "${previous_tag}"
+		printf "\n"
+		git_lg -n 5
+		printf "\n\n"
+		exit 1
+	fi
+else
+	previous_tag="null"
+fi
+
+printf "\n"
+printf "%s\n" "${tag_message}"
+printf "\n"
+
+if [[ ${previous_tag} != null ]]; then
+	printf "Unreleased commits:\n"
+	printf "\n"
+	git_lg "${previous_tag}"..
+	printf "\n"
+fi
+
+gum confirm "Are you sure you want to tag and release?" || exit
+
+if ! ./scripts/go-generate-helper-git-version-info "${tag_version}" "${tag_message}"; then
+	printf "ERROR: error encountered in go-generate-helper-git-version-info script\n"
+	exit 1
+fi
+
+declare release_message
+read -r -d '' release_message <<-EOF
+	$(git-cliff --strip header --unreleased --tag "${tag_version}")
+EOF
+
+echo Running: git-cliff --tag "${tag_version}"
+git-cliff --tag "${tag_version}" >CHANGELOG.md
+printf "\n"
+
+git add CHANGELOG.md
+git commit -m "${tag_message}"
+printf "\n"
+
+echo Running: git tag -a "${tag_version}" -m "${tag_message}"
+git tag -a "${tag_version}" -m "${tag_message}"
+printf "\n"
+
+echo Running: git show "${tag_version}"
+git show "${tag_version}"
+printf "\n"
+
+printf "\n"
+printf "Staged commits:\n"
+printf "\n"
+git_lg "${current_remote}/${current_branch}"..
+printf "\n"
+printf "\n"
+
+if gum confirm "Push the staged commits and tag?"; then
+
+	if git remote | grep -q "^fork$"; then
+		git push fork "${current_branch}"
+		git push --tag fork
+	fi
+
+	if git remote | grep -q "^upstream$"; then
+		git push upstream "${current_branch}"
+		git push --tag upstream
+
+	elif git remote | grep -q "^origin$"; then
+		git push origin "${current_branch}"
+		git push --tag origin
+	fi
+
+	if git remote get-url --push --all origin | grep -q -E '^git@github[.]'; then
+		echo Running: gh release create "${tag_version}" --title "${tag_version}" --notes \""${release_message}"\"
+		gh release create "${tag_version}" --title "${tag_version}" --notes "${release_message}"
+		printf "\n"
+	fi
+
+	if git remote get-url --push --all origin | grep -q -E '^git@gitlab[.]'; then
+		echo Running: gh release create "${tag_version}" --title "${tag_version}" --notes \""${release_message}"\"
+		glab release create "${tag_version}" --name "${tag_version}" --notes "${release_message}"
+		printf "\n"
+	fi
+
+else
+
+	printf "Don't forget to push the tag and commits with the following commands:\n"
+	printf "\n"
+
+	if git remote | grep -q "^fork$"; then
+		printf "\tgit push fork %s\n" "${current_branch}"
+		printf "\tgit push --tag fork\n"
+	fi
+
+	if git remote | grep -q "^upstream$"; then
+		printf "\tgit push upstream %s\n" "${current_branch}"
+		printf "\tgit push --tag upstream\n"
+
+	elif git remote | grep -q "^origin$"; then
+		printf "\tgit push origin %s\n" "${current_branch}"
+		printf "\tgit push --tag origin\n"
+	fi
+	printf "\n"
+
+	if git remote get-url --push --all origin | grep -q -E '^git@github[.]'; then
+		printf "\tgh release create %s --title %s --notes \"\$(git-cliff --strip header --latest)\"\n" "${tag_version}" "${tag_version}"
+		printf "\n"
+	fi
+
+	if git remote get-url --push --all origin | grep -q -E '^git@gitlab[.]'; then
+		printf "\tglab release create %s --name %s --notes \"\$(git-cliff --strip header --latest)\"" "${tag_version}" "${tag_version}"
+		printf "\n"
+	fi
+fi
