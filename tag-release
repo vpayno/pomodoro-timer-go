@@ -85,8 +85,21 @@ git-cliff --tag "${tag_version}" >CHANGELOG.md
 printf "\n"
 
 git add CHANGELOG.md
-git commit -m "${tag_message}"
+
+if git log --oneline --pretty=format:%s -n 1 | grep -E "^release: ${tag_message} -"; then
+	# found the change log release commit, amend it
+	git commit -v --amend
+else
+	git commit -m "${tag_message}"
+fi
 printf "\n"
+
+if [[ ${previous_tag} != null ]]; then
+	printf "Unreleased commits:\n"
+	printf "\n"
+	git_lg "${previous_tag}"..
+	printf "\n"
+fi
 
 echo Running: git tag -a "${tag_version}" -m "${tag_message}"
 git tag -a "${tag_version}" -m "${tag_message}"
