@@ -58,7 +58,7 @@ for target in "${targets[@]}"; do
 	fi
 done
 
-if git log --oneline --pretty=format:%s -n 1 | grep -E "^release: ${release_ver} -"; then
+if git log --oneline --pretty=format:%s -n 1 | grep -E "^release: ${release_ver} - "; then
 	# found the change log release commit, amend it
 	git commit -v --amend
 else

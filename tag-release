@@ -70,10 +70,11 @@ fi
 
 gum confirm "Are you sure you want to tag and release?" || exit
 
-if ! ./scripts/go-generate-helper-git-version-info "${tag_version}" "${tag_message}"; then
+if ! ./scripts/go-generate-helper-git-version-info "${tag_version}" "${tag_note}"; then
 	printf "ERROR: error encountered in go-generate-helper-git-version-info script\n"
 	exit 1
 fi
+printf "\n"
 
 declare release_message
 read -r -d '' release_message <<-EOF
@@ -86,7 +87,7 @@ printf "\n"
 
 git add CHANGELOG.md
 
-if git log --oneline --pretty=format:%s -n 1 | grep -E "^release: ${tag_message} -"; then
+if git log --oneline --pretty=format:%s -n 1 | grep -E "^release: ${tag_version} - "; then
 	# found the change log release commit, amend it
 	git commit -v --amend
 else
