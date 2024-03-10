@@ -1,7 +1,7 @@
 /*
 Copyright © 2024 Victor Payno
 */
-package cmd
+package cli
 
 import (
 	"os"
