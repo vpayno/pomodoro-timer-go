@@ -89,7 +89,7 @@ git add CHANGELOG.md
 
 if git log --oneline --pretty=format:%s -n 1 | grep -E "^release: ${tag_version} - "; then
 	# found the change log release commit, amend it
-	git commit -v --amend
+	git commit -v --amend --no-edit
 else
 	git commit -m "${tag_message}"
 fi

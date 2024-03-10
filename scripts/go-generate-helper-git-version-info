@@ -60,7 +60,7 @@ done
 
 if git log --oneline --pretty=format:%s -n 1 | grep -E "^release: ${release_ver} - "; then
 	# found the change log release commit, amend it
-	git commit -v --amend
+	git commit -v --amend --no-edit
 else
 	${is_release} && git commit -m "release: ${release_ver} - ${release_summary}"
 fi
