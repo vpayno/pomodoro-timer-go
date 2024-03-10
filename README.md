@@ -57,3 +57,15 @@ export TAG_TITLE="short description"
 reset
 ./tag-release "${TAG_VER}" "${TAG_TITLE}"
 ```
+
+## Usage
+
+The server creates a shared work/break session between multiple cli clients from the same user.
+
+### CLI
+
+...
+
+### Server
+
+...
